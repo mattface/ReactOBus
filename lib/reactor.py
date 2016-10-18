@@ -39,7 +39,7 @@ class Matcher(object):
         self.args = rule["exec"]["args"]
 
     def match(self, variables):
-        if self.field:
+        if self.field in variables:
             return self.pattern.match(variables[self.field]) is not None
         return False
 
@@ -47,19 +47,28 @@ class Matcher(object):
         variables = {"topic": topic,
                      "uuid": uuid,
                      "datetime": datetime,
-                     "username": username}
+                     "username": username,
+                     "data": data}
         args = [self.bin]
+        stdin = []
         for arg in self.args:
             if arg[0] == '$':
                 # TODO: check for errors
-                args.append(variables[arg[1:]])
+                args.append(variables[arg[1:]].decode("utf-8"))
+            elif arg.startswith('stdin:'):
+                if str(arg[6:])[0] == '$':
+                    stdin.append(variables[arg[7:]].decode("utf-8"))
+                else:
+                    stdin.append(arg[6:])
             else:
                 args.append(arg)
 
+        stdin_s = "\n".join(stdin)
         LOG.debug("Running: %s", args)
         try:
             out = subprocess.check_output(args, stderr=subprocess.STDOUT,
-                                          timeout=self.timeout)
+                                          universal_newlines=True,
+                                          input=stdin_s, timeout=self.timeout)
         except OSError as err:
             LOG.error("Unable to run %s (%s)", args, err)
         except subprocess.TimeoutExpired:
